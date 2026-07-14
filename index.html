@@ -703,7 +703,7 @@ async function buildMap(){
   if (!lastResult || !window.L || !document.getElementById('map')) return;
   if (lastResult._mapBuilt && mapObj && document.querySelector('#map .leaflet-pane')){
     setTimeout(()=>{ mapObj.invalidateSize();
-      if (lastResult._mapBounds) mapObj.fitBounds(lastResult._mapBounds, {padding: [30, 30]});
+      if (lastResult._mapBounds) mapObj.fitBounds(lastResult._mapBounds, {padding: [30, 30], maxZoom: 14});
     }, 200);
     return;
   }
@@ -720,8 +720,8 @@ async function buildMap(){
     const g = await geocodeDong(s.query);
     if (!g) continue;
     const color = ratioColor(s.ratio);
-    const radius = Math.min(9 + Math.sqrt(s.count)*1.6, 34);
-    L.circleMarker([g.lat, g.lon], {radius, color, fillColor: color, fillOpacity: .45, weight: 2})
+    const radiusM = Math.min(150 + Math.sqrt(s.count) * 55, 1100);
+    L.circle([g.lat, g.lon], {radius: radiusM, color, fillColor: color, fillOpacity: .45, weight: 2})
       .bindPopup(`<b>${s.dong}</b><br>거래 ${s.count.toLocaleString()}건 · 평당가 ${fmt(s.avgUnit)}만원` + (s.ratio != null ? `<br>전세가율 ${fmt1(s.ratio)}%` : ''))
       .addTo(mapObj);
     pts.push([g.lat, g.lon]);
@@ -730,8 +730,8 @@ async function buildMap(){
   if (pts.length){
     const bounds = L.latLngBounds(pts);
     lastResult._mapBounds = bounds;
-    mapObj.fitBounds(bounds, {padding: [30, 30]});
-    setTimeout(()=>{ mapObj.invalidateSize(); mapObj.fitBounds(bounds, {padding: [30, 30]}); }, 350);
+    mapObj.fitBounds(bounds, {padding: [30, 30], maxZoom: 14});
+    setTimeout(()=>{ mapObj.invalidateSize(); mapObj.fitBounds(bounds, {padding: [30, 30], maxZoom: 14}); }, 350);
   }
   lastResult._mapBuilt = true;
 }
