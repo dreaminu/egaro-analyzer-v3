@@ -702,7 +702,10 @@ function ratioColor(r){ if (r == null) return '#6366f1'; if (r >= 80) return '#1
 async function buildMap(){
   if (!lastResult || !window.L || !document.getElementById('map')) return;
   if (lastResult._mapBuilt && mapObj && document.querySelector('#map .leaflet-pane')){
-    setTimeout(()=>mapObj.invalidateSize(), 120); return;
+    setTimeout(()=>{ mapObj.invalidateSize();
+      if (lastResult._mapBounds) mapObj.fitBounds(lastResult._mapBounds, {padding: [30, 30]});
+    }, 200);
+    return;
   }
   const stats = lastResult.dongStats || [];
   const cap = document.getElementById('mapCap');
@@ -724,7 +727,12 @@ async function buildMap(){
     pts.push([g.lat, g.lon]);
   }
   if (cap) cap.textContent = pts.length ? '원을 클릭하면 동네별 상세 수치가 보입니다.' : '좌표를 찾지 못했습니다.';
-  if (pts.length) mapObj.fitBounds(pts, {padding: [30, 30]});
+  if (pts.length){
+    const bounds = L.latLngBounds(pts);
+    lastResult._mapBounds = bounds;
+    mapObj.fitBounds(bounds, {padding: [30, 30]});
+    setTimeout(()=>{ mapObj.invalidateSize(); mapObj.fitBounds(bounds, {padding: [30, 30]}); }, 350);
+  }
   lastResult._mapBuilt = true;
 }
 
