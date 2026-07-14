@@ -466,7 +466,8 @@ function tableHTML(headers, rows, cells){
 const N = v => ({v: fmt(v)});
 const dateStr = d => d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '-';
 
-function render(sales, rents, title, isSample, rentError){
+function render(sales, rents, title, isSample, rentError, placeLabel){
+  placeLabel = placeLabel || '도로명';
   lastResult = null;
   charts.forEach(c=>c.destroy()); charts = [];
   document.getElementById('resultInfo').style.display = 'none';
@@ -480,7 +481,7 @@ function render(sales, rents, title, isSample, rentError){
   const under = undervalueTable(sales);
   const trend = monthlyTrend(sales);
   const momentum = momentumTable(sales);
-  lastResult = {sales, combo, roads, jeonse, yields, under, trend, momentum, title};
+  lastResult = {sales, combo, roads, jeonse, yields, under, trend, momentum, title, placeLabel};
 
   const top = combo[0];
   document.getElementById('answerCard').innerHTML = top ? `
@@ -495,18 +496,18 @@ function render(sales, rents, title, isSample, rentError){
   const datedSales = sales.filter(r=>r.date);
   const lastDate = datedSales.length ? new Date(amax(datedSales.map(r=>+r.date))) : null;
   document.getElementById('metricCards').innerHTML = [
-    ['총 매매건수', fmt(sales.length)+'건'], ['법정동 수', fmt(dongs)+'개'], ['도로명 수', fmt(roadsN)+'개'],
+    ['총 매매건수', fmt(sales.length)+'건'], ['법정동 수', fmt(dongs)+'개'], [placeLabel+' 수', fmt(roadsN)+'개'],
     ['평균 평당가', fmt(avgUnit)+'만원'], ['전월세 데이터', rents.length?fmt(rents.length)+'건':'없음'], ['최근 거래일', dateStr(lastDate)]
   ].map(([l,v])=>`<div class="metric"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
 
   const secs = [];
   secs.push(['🏘️ 핵심 분석', `
-    <h4>도로명 + 연식 + 면적대 조합 TOP 50</h4>
-    ${tableHTML(['법정동','도로명','연식','평수대','건수','평균가(만원)','평당가(만원)','최근거래'], combo,
+    <h4>${placeLabel} + 연식 + 면적대 조합 TOP 50</h4>
+    ${tableHTML(['법정동',placeLabel,'연식','평수대','건수','평균가(만원)','평당가(만원)','최근거래'], combo,
       r=>[r.dong,r.road,r.builtB,r.areaB,N(r.count),N(r.avgPrice),N(r.avgUnit),dateStr(r.last)])}`]);
-  secs.push(['🛣️ 도로명 TOP', `
-    <h4>도로명별 거래량 TOP 50</h4>
-    ${tableHTML(['법정동','도로명','건수','평균가(만원)','평당가(만원)','최근거래'], roads,
+  secs.push(['🛣️ '+placeLabel+' TOP', `
+    <h4>${placeLabel}별 거래량 TOP 50</h4>
+    ${tableHTML(['법정동',placeLabel,'건수','평균가(만원)','평당가(만원)','최근거래'], roads,
       r=>[r.dong,r.road,N(r.count),N(r.avgPrice),N(r.avgUnit),dateStr(r.last)])}`]);
   secs.push(['🔑 전세가율', `
     <p class="cap">전세가율 = 평균 전세보증금 ÷ 평균 매매가. 높을수록 갭(필요 자기자본)이 적게 들지만, 90% 이상은 역전세·보증금 반환 위험이 큽니다. (매매·전세 각 2건 이상 조합만)</p>
@@ -633,7 +634,7 @@ async function apiAnalyze(){
             const built = toNum(xtag(it, ['buildYear','건축년도']));
             sales.push({
               sigungu: sidoName + ' ' + guName, dong,
-              road: xtag(it, ['roadNm','도로명']) || '미상',
+              road: xtag(it, ['mhouseNm','aptNm','연립다세대','아파트']) || xtag(it, ['roadNm','도로명']) || '미상',
               complex: xtag(it, ['mhouseNm','aptNm','연립다세대','아파트']) || '미상',
               type: typeName, m2, py: Math.round(py*100)/100, areaB: areaBucket(py),
               price, unit: py>0 ? price/py : null,
@@ -657,7 +658,7 @@ async function apiAnalyze(){
     }
     status.textContent = `수집 완료: 매매 ${sales.length.toLocaleString()}건, 전월세 ${rents.length.toLocaleString()}건`;
     const title = document.getElementById('titleHint').value.trim() || `${sidoName} ${guName} ${year}년 ${kind==='apt'?'아파트':'연립/다세대'}`;
-    render(sales, rents, title, false, null);
+    render(sales, rents, title, false, null, '건물명');
     document.getElementById('reportTitle').scrollIntoView({behavior:'smooth', block:'start'});
   } catch(e){
     info.textContent = '자동 수집 실패: ' + e.message;
@@ -729,8 +730,8 @@ document.getElementById('btnExcel').addEventListener('click', ()=>{
     if (!rows.length) return;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.map(mapper)), name.slice(0,31));
   };
-  add('핵심조합', L.combo, r=>({법정동:r.dong,도로명:r.road,연식:r.builtB,평수대:r.areaB,건수:r.count,'평균가(만원)':Math.round(r.avgPrice),'평당가(만원)':Math.round(r.avgUnit??0),최근거래:dateStr(r.last)}));
-  add('도로명TOP', L.roads, r=>({법정동:r.dong,도로명:r.road,건수:r.count,'평균가(만원)':Math.round(r.avgPrice),'평당가(만원)':Math.round(r.avgUnit??0),최근거래:dateStr(r.last)}));
+  add('핵심조합', L.combo, r=>({법정동:r.dong,[L.placeLabel||'도로명']:r.road,연식:r.builtB,평수대:r.areaB,건수:r.count,'평균가(만원)':Math.round(r.avgPrice),'평당가(만원)':Math.round(r.avgUnit??0),최근거래:dateStr(r.last)}));
+  add((L.placeLabel||'도로명')+'TOP', L.roads, r=>({법정동:r.dong,[L.placeLabel||'도로명']:r.road,건수:r.count,'평균가(만원)':Math.round(r.avgPrice),'평당가(만원)':Math.round(r.avgUnit??0),최근거래:dateStr(r.last)}));
   add('전세가율', L.jeonse, r=>({법정동:r.dong,평수대:r.areaB,평균매매가:Math.round(r.avgSale),평균전세보증금:Math.round(r.avgJeonse),갭:Math.round(r.gap),'전세가율%':Math.round(r.ratio*10)/10,판정:r.verdict,매매건수:r.sc,전세건수:r.jc}));
   add('임대수익률', L.yields, r=>({법정동:r.dong,평수대:r.areaB,평균매매가:Math.round(r.avgSale),평균보증금:Math.round(r.avgDep),평균월세:Math.round(r.avgMon),'표면수익률%':Math.round(r.gross*100)/100,'보증금감안%':Math.round(r.net*100)/100}));
   add('저평가비교', L.under, r=>({법정동:r.dong,연식:r.builtB,평수대:r.areaB,동평당가:Math.round(r.unit),그룹중앙값:Math.round(r.med),'편차%':Math.round(r.dev*10)/10,건수:r.count}));
