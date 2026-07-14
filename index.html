@@ -6,6 +6,8 @@
 <title>빌라 실거래 분석기 V3 (서버리스)</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 * { box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif; margin: 0; color: #0f172a; background: #eef1f8; }
@@ -481,7 +483,16 @@ function render(sales, rents, title, isSample, rentError, placeLabel){
   const under = undervalueTable(sales);
   const trend = monthlyTrend(sales);
   const momentum = momentumTable(sales);
-  lastResult = {sales, combo, roads, jeonse, yields, under, trend, momentum, title, placeLabel};
+  const dongGroups = groupBy(sales, r=>r.dong);
+  const jeonseByDong = groupBy(rents.filter(r=>r.kind==='전세'), r=>r.dong);
+  const dongStats = [...dongGroups.entries()].map(([dong, items])=>{
+    const j = jeonseByDong.get(dong) || [];
+    const avgSale = mean(items.map(r=>r.price));
+    const ratio = (j.length>=2 && items.length>=2) ? mean(j.map(x=>x.deposit))/avgSale*100 : null;
+    return {dong, query: items[0].sigungu + ' ' + dong, count: items.length,
+            avgUnit: mean(items.map(r=>r.unit).filter(u=>u!=null)), ratio};
+  }).sort((a,b)=>b.count-a.count).slice(0, 40);
+  lastResult = {sales, combo, roads, jeonse, yields, under, trend, momentum, title, placeLabel, dongStats};
 
   const top = combo[0];
   document.getElementById('answerCard').innerHTML = top ? `
@@ -533,6 +544,10 @@ function render(sales, rents, title, isSample, rentError, placeLabel){
     <h4>동네별 모멘텀 (최근 3개월 vs 직전 3개월)</h4>
     ${tableHTML(['법정동','최근3개월','직전3개월','증감','추세'], momentum,
       r=>[r.dong,N(r.recent),N(r.prev),N(r.diff),r.trend])}`]);
+  secs.push(['🗺️ 지도', `
+    <p class="cap">원 크기 = 거래량 · 색 = 전세가율 (🟢 70%↓ 갭 큼 · 🟡 70~80 · 🟠 80~90 · 🔴 90%↑ 역전세 위험 · 🔵 전월세 데이터 없음)</p>
+    <div class="no-print"><div id="map" style="height:460px;border-radius:12px;border:1px solid #e5e7eb"></div></div>
+    <p class="cap" id="mapCap"></p>`]);
 
   document.getElementById('tabBar').innerHTML = secs.map((s,i)=>`<button class="tab${i===0?' on':''}" data-i="${i}">${s[0]}</button>`).join('');
   document.getElementById('sections').innerHTML = secs.map((s,i)=>`<div class="sec${i===0?' on':''}" id="sec${i}"><h4 class="no-print" style="display:none"></h4><div><h4 style="margin-top:4px">${s[0]}</h4>${s[1]}</div></div>`).join('');
@@ -540,6 +555,7 @@ function render(sales, rents, title, isSample, rentError, placeLabel){
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
     document.querySelectorAll('.sec').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); document.getElementById('sec'+b.dataset.i).classList.add('on');
+    if (document.getElementById('sec'+b.dataset.i).querySelector('#map')) buildMap();
   }));
 
   if (trend.length && window.Chart){
@@ -665,6 +681,53 @@ async function apiAnalyze(){
   } finally {
     btn.disabled = false; btn.textContent = orig;
   }
+}
+
+/* ---------------- 지도 ---------------- */
+let mapObj = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function geocodeDong(query){
+  const key = 'geo:' + query;
+  const c = localStorage.getItem(key);
+  if (c !== null) return c === 'x' ? null : JSON.parse(c);
+  let v = null;
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&q=' + encodeURIComponent(query));
+    const j = await r.json();
+    if (j.length) v = {lat: +j[0].lat, lon: +j[0].lon};
+  } catch(e){}
+  try { localStorage.setItem(key, v ? JSON.stringify(v) : 'x'); } catch(e){}
+  await sleep(1100);
+  return v;
+}
+function ratioColor(r){ if (r == null) return '#6366f1'; if (r >= 90) return '#dc2626'; if (r >= 80) return '#f97316'; if (r >= 70) return '#eab308'; return '#16a34a'; }
+async function buildMap(){
+  if (!lastResult || !window.L || !document.getElementById('map')) return;
+  if (lastResult._mapBuilt && mapObj && document.querySelector('#map .leaflet-pane')){
+    setTimeout(()=>mapObj.invalidateSize(), 120); return;
+  }
+  const stats = lastResult.dongStats || [];
+  const cap = document.getElementById('mapCap');
+  if (mapObj){ try{ mapObj.remove(); }catch(e){} mapObj = null; }
+  mapObj = L.map('map').setView([37.45, 126.7], 12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OpenStreetMap'}).addTo(mapObj);
+  setTimeout(()=>mapObj.invalidateSize(), 150);
+  const pts = [];
+  for (let i = 0; i < stats.length; i++){
+    const s = stats[i];
+    if (cap) cap.textContent = `동네 좌표 조회 중... (${i+1}/${stats.length}) — 처음 한 번만 걸리고 다음부터는 즉시 표시됩니다.`;
+    const g = await geocodeDong(s.query);
+    if (!g) continue;
+    const color = ratioColor(s.ratio);
+    const radius = Math.min(9 + Math.sqrt(s.count)*1.6, 34);
+    L.circleMarker([g.lat, g.lon], {radius, color, fillColor: color, fillOpacity: .45, weight: 2})
+      .bindPopup(`<b>${s.dong}</b><br>거래 ${s.count.toLocaleString()}건 · 평당가 ${fmt(s.avgUnit)}만원` + (s.ratio != null ? `<br>전세가율 ${fmt1(s.ratio)}%` : ''))
+      .addTo(mapObj);
+    pts.push([g.lat, g.lon]);
+  }
+  if (cap) cap.textContent = pts.length ? '원을 클릭하면 동네별 상세 수치가 보입니다.' : '좌표를 찾지 못했습니다.';
+  if (pts.length) mapObj.fitBounds(pts, {padding: [30, 30]});
+  lastResult._mapBuilt = true;
 }
 
 /* ---------------- 이벤트 ---------------- */
