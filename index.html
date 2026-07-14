@@ -79,6 +79,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   table.data tr { page-break-inside: avoid; }
   table.data thead { display: table-header-group; }
   .chart-box { height: 220px; }
+  #map { height: 420px !important; page-break-inside: avoid; }
+  .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
 }
 </style>
 </head>
@@ -544,7 +546,7 @@ function render(sales, rents, title, isSample, rentError, placeLabel){
       r=>[r.dong,N(r.recent),N(r.prev),N(r.diff),r.trend])}`]);
   secs.push(['🗺️ 지도', `
     <p class="cap">원 크기 = 거래량 · 색 = 투자금(갭): 🟢 갭 작음(전세가율 80%↑, 소액투자 유리) · 🟡 갭 보통(70~80%) · ⚪ 갭 큼(70%↓) · 🔵 전월세 데이터 없음</p>
-    <div class="no-print"><div id="map" style="height:460px;border-radius:12px;border:1px solid #e5e7eb"></div></div>
+    <div id="map" style="height:460px;border-radius:12px;border:1px solid #e5e7eb"></div>
     <p class="cap" id="mapCap"></p>`]);
 
   document.getElementById('tabBar').innerHTML = secs.map((s,i)=>`<button class="tab${i===0?' on':''}" data-i="${i}">${s[0]}</button>`).join('');
@@ -787,8 +789,15 @@ async function analyze(sample){
 }
 document.getElementById('btnAnalyze').addEventListener('click', ()=>analyze(false));
 document.getElementById('btnSample').addEventListener('click', ()=>analyze(true));
-document.getElementById('btnPrint').addEventListener('click', ()=>{
+document.getElementById('btnPrint').addEventListener('click', async ()=>{
   if (!lastResult){ alert('먼저 분석을 실행해 주세요.'); return; }
+  const mapTab = [...document.querySelectorAll('.tab')].find(t=>t.textContent.includes('지도'));
+  if (mapTab && !lastResult._mapBuilt){
+    mapTab.click();
+    const t0 = Date.now();
+    while (!lastResult._mapBuilt && Date.now() - t0 < 45000) await sleep(300);
+    await sleep(1500);
+  }
   window.print();
 });
 document.getElementById('btnExcel').addEventListener('click', ()=>{
