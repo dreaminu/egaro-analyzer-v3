@@ -353,8 +353,7 @@ function jeonseTable(sales, rents){
     const avgJeonse = mean(jItems.map(r=>r.deposit));
     const ratio = avgJeonse / avgSale * 100;
     let verdict = '갭 큼 · 투자금 多';
-    if (ratio >= 90) verdict = '⚠️ 갭 최소지만 역전세 위험';
-    else if (ratio >= 80) verdict = '✅ 갭 작음 · 소액투자 유리';
+    if (ratio >= 80) verdict = '✅ 갭 작음 · 소액투자 유리';
     else if (ratio >= 70) verdict = '갭 보통';
     rows.push({dong, areaB, avgSale, avgJeonse, gap: avgSale-avgJeonse, ratio, verdict, sc: sItems.length, jc: jItems.length});
   }
@@ -521,10 +520,9 @@ function render(sales, rents, title, isSample, rentError, placeLabel){
     ${tableHTML(['법정동',placeLabel,'건수','평균가(만원)','평당가(만원)','최근거래'], roads,
       r=>[r.dong,r.road,N(r.count),N(r.avgPrice),N(r.avgUnit),dateStr(r.last)])}`]);
   secs.push(['🔑 전세가율', `
-    <p class="cap">투자자 기준: 전세가율이 높을수록 갭(필요 투자금 = 갭 컬럼)이 작아 소액으로 매수할 수 있습니다. 단 90% 이상은 전세가가 조금만 내려도 보증금 반환 부담(역전세)이 생기는 구간이라 별도 표시합니다. (매매·전세 각 2건 이상 조합만)</p>
+    <p class="cap">투자자 기준: 전세가율이 높을수록 갭(필요 투자금 = 갭 컬럼)이 작아 소액으로 매수할 수 있습니다. 갭 작은 순으로 정렬돼 있습니다. (매매·전세 각 2건 이상 조합만)</p>
     ${rentError ? `<div class="warn">${rentError}</div>` : ''}
     ${!rents.length && !rentError ? '<div class="warn">전월세 엑셀을 올리면 전세가율이 계산됩니다.</div>' : ''}
-    ${jeonse.filter(r=>r.ratio>=90).length ? `<div class="warn">전세가율 90% 이상 조합 ${jeonse.filter(r=>r.ratio>=90).length}개 — 갭은 최소지만 보증금 반환 위험이 가장 큰 구간입니다.</div>` : ''}
     ${tableHTML(['법정동','평수대','평균매매가','평균전세보증금','갭(자기자본)','전세가율%','판정','매매','전세'], jeonse,
       r=>[r.dong,r.areaB,N(r.avgSale),N(r.avgJeonse),N(r.gap),{v:fmt1(r.ratio)},r.verdict,N(r.sc),N(r.jc)])}`]);
   secs.push(['💰 임대수익률', `
@@ -545,7 +543,7 @@ function render(sales, rents, title, isSample, rentError, placeLabel){
     ${tableHTML(['법정동','최근3개월','직전3개월','증감','추세'], momentum,
       r=>[r.dong,N(r.recent),N(r.prev),N(r.diff),r.trend])}`]);
   secs.push(['🗺️ 지도', `
-    <p class="cap">원 크기 = 거래량 · 색 = 투자금(갭) 기준: 🟢 갭 작음(전세가율 80~90%, 소액투자 유리) · 🟡 갭 보통(70~80%) · ⚪ 갭 큼(70%↓, 투자금 多) · 🔴 갭 최소지만 역전세 위험(90%↑) · 🔵 전월세 데이터 없음</p>
+    <p class="cap">원 크기 = 거래량 · 색 = 투자금(갭): 🟢 갭 작음(전세가율 80%↑, 소액투자 유리) · 🟡 갭 보통(70~80%) · ⚪ 갭 큼(70%↓) · 🔵 전월세 데이터 없음</p>
     <div class="no-print"><div id="map" style="height:460px;border-radius:12px;border:1px solid #e5e7eb"></div></div>
     <p class="cap" id="mapCap"></p>`]);
 
@@ -700,7 +698,7 @@ async function geocodeDong(query){
   await sleep(1100);
   return v;
 }
-function ratioColor(r){ if (r == null) return '#6366f1'; if (r >= 90) return '#dc2626'; if (r >= 80) return '#16a34a'; if (r >= 70) return '#eab308'; return '#94a3b8'; }
+function ratioColor(r){ if (r == null) return '#6366f1'; if (r >= 80) return '#16a34a'; if (r >= 70) return '#eab308'; return '#94a3b8'; }
 async function buildMap(){
   if (!lastResult || !window.L || !document.getElementById('map')) return;
   if (lastResult._mapBuilt && mapObj && document.querySelector('#map .leaflet-pane')){
